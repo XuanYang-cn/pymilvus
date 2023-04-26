@@ -1011,7 +1011,7 @@ class GrpcHandler:
         if response.status.error_code != 0:
             raise MilvusException(response.status.error_code, response.status.reason)
 
-        req = Prepare.manual_compaction(response.collectionID, 0)
+        req = Prepare.manual_compaction(response.collectionID, 0, **kwargs)
         future = self._stub.ManualCompaction.future(req, timeout=timeout)
         response = future.result()
         if response.status.error_code != 0:

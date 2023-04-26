@@ -626,16 +626,18 @@ class Prepare:
         return request
 
     @classmethod
-    def manual_compaction(cls, collection_id, timetravel):
+    def manual_compaction(cls, collection_id, timetravel, **kwargs):
         if collection_id is None or not isinstance(collection_id, int):
             raise ParamError(message=f"collection_id value {collection_id} is illegal")
 
         if timetravel is None or not isinstance(timetravel, int):
             raise ParamError(message=f"timetravel value {timetravel} is illegal")
 
-        request = milvus_types.ManualCompactionRequest()
-        request.collectionID = collection_id
-        request.timetravel = timetravel
+        request = milvus_types.ManualCompactionRequest(
+            collectionID=collection_id,
+            timetravel=timetravel,
+            segmentIDs=kwargs.get("segmentIDs", []),
+        )
 
         return request
 
