@@ -241,13 +241,6 @@ class SearchResult(list):
                     field_meta,
                 )
                 continue
-
-            if dtype == DataType.INT8_VECTOR:
-                field2data[name] = (
-                    vectors.int8_vector[start * dim : end * dim],
-                    field_meta,
-                )
-                continue
         return field2data
 
     def get_session_ts(self):
@@ -319,7 +312,6 @@ class Hits(list):
                     DataType.BINARY_VECTOR,
                     DataType.BFLOAT16_VECTOR,
                     DataType.FLOAT16_VECTOR,
-                    DataType.INT8_VECTOR,
                 ):
                     dim = field_meta.vectors.dim
                     if field_meta.type in [DataType.BINARY_VECTOR]:
