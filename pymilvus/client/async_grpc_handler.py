@@ -136,7 +136,7 @@ class AsyncGrpcHandler:
                 (cygrpc.ChannelArgKey.max_send_message_length, -1),
                 (cygrpc.ChannelArgKey.max_receive_message_length, -1),
                 ("grpc.enable_retries", 1),
-                ("grpc.keepalive_time_ms", 55000),
+                #  ("grpc.keepalive_time_ms", 55000),
             ]
             if not self._secure:
                 self._async_channel = grpc.aio.insecure_channel(
