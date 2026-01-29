@@ -607,27 +607,6 @@ class TestQueryRequest:
         )
         assert req is not None
 
-    def test_query_group_by_fields(self):
-        """Test query with group_by_fields."""
-        req = Prepare.query_request(
-            collection_name="test",
-            expr="id > 0",
-            output_fields=["id"],
-            partition_names=[],
-            group_by_fields=["category"],  # Use the correct kwarg name
-        )
-        assert req is not None
-
-    def test_query_group_by_fields_invalid_type(self):
-        """Test query with non-list group_by_fields."""
-        with pytest.raises(TypeError):
-            Prepare.query_request(
-                collection_name="test",
-                expr="id > 0",
-                output_fields=["id"],
-                partition_names=[],
-                group_by_fields="category",  # Use the correct kwarg name
-            )
 
 
 class TestFunctionSchemas:

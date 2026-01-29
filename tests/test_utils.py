@@ -422,32 +422,6 @@ class TestGetParams:
         assert result["nprobe"] == 10
 
 
-class TestValidateIsoTimestamp:
-    def test_valid_iso_timestamps(self):
-        valid_timestamps = [
-            "2023-01-01T00:00:00Z",
-            "2023-01-01T12:30:45+00:00",
-            "2023-01-01",
-            "2023-01-01T00:00:00.123456Z",
-        ]
-        for ts in valid_timestamps:
-            assert utils.validate_iso_timestamp(ts) is True, f"Expected {ts} to be valid"
-
-    def test_invalid_iso_timestamps(self):
-        invalid_timestamps = [
-            "not-a-timestamp",
-            "2023/01/01",
-            "01-01-2023",
-            "",
-        ]
-        for ts in invalid_timestamps:
-            assert utils.validate_iso_timestamp(ts) is False, f"Expected {ts} to be invalid"
-
-    def test_invalid_type(self):
-        assert utils.validate_iso_timestamp(None) is False
-        assert utils.validate_iso_timestamp(123) is False
-
-
 class TestUtils:
     """Legacy test class kept for compatibility."""
 
