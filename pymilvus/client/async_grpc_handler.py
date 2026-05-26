@@ -28,7 +28,7 @@ from pymilvus.exceptions import (
 )
 from pymilvus.grpc_gen import common_pb2, milvus_pb2_grpc
 from pymilvus.grpc_gen import milvus_pb2 as milvus_types
-from pymilvus.orm.schema import Function, Highlighter
+from pymilvus.orm.schema import Function, Highlighter, StructFieldSchema
 from pymilvus.settings import Config
 
 from . import entity_helper, ts_utils, utils
@@ -69,6 +69,7 @@ from .utils import (
     get_server_type,
     is_successful,
     len_of,
+    replicate_checkpoint_to_dict,
 )
 
 logger = logging.getLogger(__name__)
@@ -1531,6 +1532,23 @@ class AsyncGrpcHandler:
         check_status(status)
 
     @retry_on_rpc_failure()
+    async def add_collection_struct_field(
+        self,
+        collection_name: str,
+        struct_field_schema: StructFieldSchema,
+        timeout: Optional[float] = None,
+        context: Optional[CallContext] = None,
+        **kwargs,
+    ):
+        check_pass_param(collection_name=collection_name, timeout=timeout)
+        request = Prepare.add_collection_struct_field_request(collection_name, struct_field_schema)
+        status = await self._async_stub.AddCollectionStructField(
+            request, timeout=timeout, metadata=_api_level_md(context)
+        )
+        check_status(status)
+        self._invalidate_schema(collection_name, db_name=(context.get_db_name() if context else ""))
+
+    @retry_on_rpc_failure()
     async def drop_collection_function(
         self,
         collection_name: str,
@@ -2810,3 +2828,29 @@ class AsyncGrpcHandler:
         )
         check_status(response.status)
         return [parse_refresh_job_info(job) for job in response.jobs]
+
+    @retry_on_rpc_failure()
+    async def get_replicate_info(
+        self,
+        source_cluster_id: str,
+        target_pchannel: str,
+        timeout: Optional[float] = None,
+        context: Optional[CallContext] = None,
+        **kwargs,
+    ):
+        """Async version of GrpcHandler.get_replicate_info. See sync version for docs."""
+        request = Prepare.get_replicate_info_request(
+            source_cluster_id=source_cluster_id,
+            target_pchannel=target_pchannel,
+        )
+        resp = await self._async_stub.GetReplicateInfo(
+            request, timeout=timeout, metadata=_api_level_md(context)
+        )
+        return {
+            "checkpoint": replicate_checkpoint_to_dict(
+                resp.checkpoint if resp.HasField("checkpoint") else None
+            ),
+            "salvage_checkpoint": replicate_checkpoint_to_dict(
+                resp.salvage_checkpoint if resp.HasField("salvage_checkpoint") else None
+            ),
+        }

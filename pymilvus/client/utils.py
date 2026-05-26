@@ -477,6 +477,8 @@ def convert_struct_fields_to_user_format(struct_array_fields: List[Dict]) -> Lis
             "element_type": DataType.STRUCT,
             "params": {},
         }
+        if struct_field_info.get("nullable", False):
+            user_struct_field["nullable"] = True
 
         # Extract max_capacity from first field (all fields should have the same value)
         max_capacity = None
@@ -499,7 +501,7 @@ def convert_struct_fields_to_user_format(struct_array_fields: List[Dict]) -> Lis
             if user_field_type:
                 struct_sub_field = {
                     "field_id": f.get("field_id"),
-                    "name": f["name"],
+                    "name": strip_struct_sub_field_name(struct_field_info["name"], f["name"]),
                     "type": user_field_type,
                     "description": f.get("description", ""),
                 }
@@ -518,6 +520,13 @@ def convert_struct_fields_to_user_format(struct_array_fields: List[Dict]) -> Lis
     return converted_fields
 
 
+def strip_struct_sub_field_name(struct_name: str, field_name: str) -> str:
+    prefix = f"{struct_name}["
+    if field_name.startswith(prefix) and field_name.endswith("]"):
+        return field_name[len(prefix) : -1]
+    return field_name
+
+
 def validate_iso_timestamp(s: str) -> bool:
     try:
         isoparse(s)
@@ -525,3 +534,35 @@ def validate_iso_timestamp(s: str) -> bool:
         return False
     else:
         return True
+
+
+def replicate_checkpoint_to_dict(cp: Optional[common_pb2.ReplicateCheckpoint]) -> Optional[Dict]:
+    """Convert a common_pb2.ReplicateCheckpoint proto to a plain dict, or None if empty.
+
+    Returns None when the proto is None or has all default values (no cluster_id,
+    no pchannel, time_tick=0). The nested message_id is itself a dict with
+    {"id": str, "wal_name": str} keys, where wal_name is the WALName enum name
+    ("Unknown" | "RocksMQ" | "Pulsar" | "Kafka" | "WoodPecker" | "Test").
+    Returns message_id=None when the proto's message_id field is unset.
+    """
+    if cp is None:
+        return None
+    if (
+        not cp.cluster_id
+        and not cp.pchannel
+        and cp.time_tick == 0
+        and not cp.HasField("message_id")
+    ):
+        return None
+    message_id = None
+    if cp.HasField("message_id"):
+        message_id = {
+            "id": cp.message_id.id,
+            "wal_name": common_pb2.WALName.Name(cp.message_id.WAL_name),
+        }
+    return {
+        "cluster_id": cp.cluster_id,
+        "pchannel": cp.pchannel,
+        "message_id": message_id,
+        "time_tick": cp.time_tick,
+    }

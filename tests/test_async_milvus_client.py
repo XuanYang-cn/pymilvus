@@ -391,6 +391,65 @@ class TestAsyncMilvusClientNewFeatures:
         result = AsyncMilvusClient.create_struct_field_schema()
         assert isinstance(result, StructFieldSchema)
 
+    @pytest.mark.asyncio
+    async def test_add_collection_struct_field_requires_nullable(self, client_and_handler):
+        """Test that adding struct field requires nullable=True."""
+        client, _ = client_and_handler
+        struct_schema = StructFieldSchema(description="schema desc")
+        struct_schema.add_field("score", DataType.FLOAT)
+
+        with pytest.raises(
+            ParamError,
+            match="Adding struct field to existing collection requires nullable=True",
+        ):
+            await client.add_collection_struct_field(
+                "test_collection",
+                "metadata",
+                struct_schema,
+                max_capacity=16,
+                nullable=False,
+            )
+
+    @pytest.mark.asyncio
+    async def test_add_collection_struct_field_requires_struct_schema(self, client_and_handler):
+        """Test that adding struct field requires StructFieldSchema."""
+        client, _ = client_and_handler
+
+        with pytest.raises(ParamError, match="struct_schema must be StructFieldSchema"):
+            await client.add_collection_struct_field(
+                "test_collection",
+                "metadata",
+                object(),
+                max_capacity=16,
+            )
+
+    @pytest.mark.asyncio
+    async def test_add_collection_struct_field(self, client_and_handler):
+        """Test adding nullable struct field calls connection handler."""
+        client, mock_handler = client_and_handler
+        mock_handler.add_collection_struct_field = AsyncMock()
+        struct_schema = StructFieldSchema(description="schema desc")
+        struct_schema.add_field("score", DataType.FLOAT)
+
+        await client.add_collection_struct_field(
+            "test_collection",
+            "metadata",
+            struct_schema,
+            max_capacity=16,
+            desc="field desc",
+            mmap_enabled=True,
+            warmup={"policy": "async"},
+        )
+
+        mock_handler.add_collection_struct_field.assert_awaited_once()
+        added_schema = mock_handler.add_collection_struct_field.call_args.args[1]
+        assert added_schema.name == "metadata"
+        assert added_schema.max_capacity == 16
+        assert added_schema.nullable is True
+        assert added_schema.description == "field desc"
+        assert added_schema.params["mmap_enabled"] is True
+        assert added_schema.params["warmup"] == {"policy": "async"}
+
     @pytest.mark.parametrize(
         "uri, db_name, expected_db_name",
         [
@@ -1230,3 +1289,49 @@ class TestAsyncMilvusClientExternalCollection:
         mock_handler.list_refresh_external_collection_jobs.assert_called_once_with(
             collection_name="ext_coll", timeout=None, context=ANY
         )
+
+
+class TestAsyncMilvusClientGetReplicateInfo:
+    """Tests for AsyncMilvusClient.get_replicate_info."""
+
+    @pytest.mark.asyncio
+    async def test_delegation(self, client_and_handler):
+        client, mock_handler = client_and_handler
+        expected = {
+            "checkpoint": {
+                "cluster_id": "primary",
+                "pchannel": "ch0",
+                "message_id": {"id": "msg-x", "wal_name": "Pulsar"},
+                "time_tick": 200,
+            },
+            "salvage_checkpoint": None,
+        }
+        mock_handler.get_replicate_info = AsyncMock(return_value=expected)
+
+        result = await client.get_replicate_info(
+            source_cluster_id="src",
+            target_pchannel="ch0",
+            timeout=10,
+        )
+
+        assert result == expected
+        mock_handler.get_replicate_info.assert_called_once_with(
+            source_cluster_id="src",
+            target_pchannel="ch0",
+            timeout=10,
+            context=ANY,
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_none_dict_when_no_checkpoints(self, client_and_handler):
+        client, mock_handler = client_and_handler
+        expected = {"checkpoint": None, "salvage_checkpoint": None}
+        mock_handler.get_replicate_info = AsyncMock(return_value=expected)
+
+        result = await client.get_replicate_info(
+            source_cluster_id="src",
+            target_pchannel="ch0",
+        )
+
+        assert result == expected
+        mock_handler.get_replicate_info.assert_called_once()

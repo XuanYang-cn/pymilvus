@@ -1362,6 +1362,34 @@ class TestExtractRowDataV2:
         result = extract_row_data_from_fields_data_v2(field_data, entity_rows)
         assert result is True
 
+    def test_legacy_extract_array_of_struct_raises(self):
+        """Test legacy row extraction rejects struct arrays."""
+        field_data = schema_types.FieldData()
+        field_data.type = DataType._ARRAY_OF_STRUCT
+        field_data.field_name = "struct_field"
+
+        with pytest.raises(MilvusException, match="does not support ARRAY_OF_STRUCT"):
+            extract_row_data_from_fields_data([field_data], 0)
+
+    def test_extract_nullable_struct_array_row(self):
+        """Test nullable struct array row decodes null separately from empty array."""
+        struct_arrays = schema_types.StructArrayField()
+        sub_field = struct_arrays.fields.add()
+        sub_field.field_name = "metadata[score]"
+        sub_field.type = DataType.ARRAY
+        sub_field.valid_data.extend([False, True])
+        sub_field.scalars.array_data.element_type = DataType.FLOAT
+        sub_field.scalars.array_data.data.append(schema_types.ScalarField())
+        sub_field.scalars.array_data.data.append(
+            schema_types.ScalarField(float_data=schema_types.FloatArray(data=[1.0, 2.0]))
+        )
+
+        assert entity_helper.extract_struct_array_from_column_data(struct_arrays, 0) is None
+        assert entity_helper.extract_struct_array_from_column_data(struct_arrays, 1) == [
+            {"score": 1.0},
+            {"score": 2.0},
+        ]
+
     def test_extract_array_of_vector_returns_true(self):
         """Test _ARRAY_OF_VECTOR returns True for lazy processing"""
 

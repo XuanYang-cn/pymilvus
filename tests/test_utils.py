@@ -6,7 +6,9 @@ import pytest
 from pymilvus.client import utils
 from pymilvus.client.constants import LOGICAL_BITS, LOGICAL_BITS_MASK
 from pymilvus.client.types import DataType
+from pymilvus.client.utils import replicate_checkpoint_to_dict
 from pymilvus.exceptions import MilvusException, ParamError
+from pymilvus.grpc_gen import common_pb2
 
 
 class TestGetServerType:
@@ -314,6 +316,53 @@ class TestSparseParseSingleRow:
             utils.sparse_parse_single_row(b"\x00\x01\x02")
 
 
+class TestConvertStructFieldsToUserFormat:
+    def test_nullable_struct_and_stored_sub_field_names(self):
+        converted = utils.convert_struct_fields_to_user_format(
+            [
+                {
+                    "field_id": 10,
+                    "name": "metadata",
+                    "description": "desc",
+                    "nullable": True,
+                    "fields": [
+                        {
+                            "field_id": 11,
+                            "name": "metadata[score]",
+                            "element_type": DataType.FLOAT,
+                            "description": "score desc",
+                            "params": {"max_capacity": "16", "mmap_enabled": True},
+                        }
+                    ],
+                }
+            ]
+        )
+
+        assert converted == [
+            {
+                "field_id": 10,
+                "name": "metadata",
+                "description": "desc",
+                "type": DataType.ARRAY,
+                "element_type": DataType.STRUCT,
+                "params": {"max_capacity": "16"},
+                "nullable": True,
+                "struct_fields": [
+                    {
+                        "field_id": 11,
+                        "name": "score",
+                        "type": DataType.FLOAT,
+                        "description": "score desc",
+                        "params": {"mmap_enabled": True},
+                    }
+                ],
+            }
+        ]
+
+    def test_strip_struct_sub_field_name_passthrough(self):
+        assert utils.strip_struct_sub_field_name("metadata", "score") == "score"
+
+
 class TestTraverseInfo:
     def test_basic_traverse(self):
         fields_info = [
@@ -404,3 +453,55 @@ class TestValidateIsoTimestamp:
     def test_invalid_type(self):
         assert utils.validate_iso_timestamp(None) is False
         assert utils.validate_iso_timestamp(123) is False
+
+
+class TestReplicateCheckpointToDict:
+    """Tests for replicate_checkpoint_to_dict helper."""
+
+    def test_returns_none_for_none_input(self):
+        assert replicate_checkpoint_to_dict(None) is None
+
+    def test_returns_none_for_empty_proto(self):
+        cp = common_pb2.ReplicateCheckpoint()
+        assert replicate_checkpoint_to_dict(cp) is None
+
+    def test_populated_with_message_id(self):
+        cp = common_pb2.ReplicateCheckpoint(
+            cluster_id="primary",
+            pchannel="by-dev-rootcoord-dml_0",
+            message_id=common_pb2.MessageID(id="msg-1", WAL_name=common_pb2.WALName.Pulsar),
+            time_tick=12345,
+        )
+        result = replicate_checkpoint_to_dict(cp)
+        assert result == {
+            "cluster_id": "primary",
+            "pchannel": "by-dev-rootcoord-dml_0",
+            "message_id": {"id": "msg-1", "wal_name": "Pulsar"},
+            "time_tick": 12345,
+        }
+
+    def test_populated_without_message_id(self):
+        cp = common_pb2.ReplicateCheckpoint(
+            cluster_id="primary",
+            pchannel="ch0",
+            time_tick=9,
+        )
+        result = replicate_checkpoint_to_dict(cp)
+        assert result == {
+            "cluster_id": "primary",
+            "pchannel": "ch0",
+            "message_id": None,
+            "time_tick": 9,
+        }
+
+    def test_only_message_id_set(self):
+        cp = common_pb2.ReplicateCheckpoint(
+            message_id=common_pb2.MessageID(id="msg-1", WAL_name=common_pb2.WALName.Pulsar),
+        )
+        result = replicate_checkpoint_to_dict(cp)
+        assert result == {
+            "cluster_id": "",
+            "pchannel": "",
+            "message_id": {"id": "msg-1", "wal_name": "Pulsar"},
+            "time_tick": 0,
+        }
