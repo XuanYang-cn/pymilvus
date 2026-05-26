@@ -780,12 +780,29 @@ class TestLogicalTypeInsertPaths:
     @pytest.mark.parametrize(
         "dtype,value,attr,expected",
         [
+            (DataType.BOOL, True, "bool_data", True),
+            (DataType.INT8, 7, "int_data", 7),
+            (DataType.INT16, 8, "int_data", 8),
+            (DataType.INT32, 9, "int_data", 9),
             (DataType.INT64, 7, "long_data", 7),
+            (DataType.FLOAT, 1.5, "float_data", 1.5),
+            (DataType.DOUBLE, 2.5, "double_data", 2.5),
             (DataType.TIMESTAMPTZ, "2026-05-18T10:00:00Z", "string_data", "2026-05-18T10:00:00Z"),
             (DataType.JSON, {"ok": True}, "json_data", orjson.dumps({"ok": True})),
             (DataType.GEOMETRY, "POINT(1 2)", "geometry_wkt_data", "POINT(1 2)"),
         ],
-        ids=["int64", "timestamptz", "json", "geometry"],
+        ids=[
+            "bool",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "float",
+            "double",
+            "timestamptz",
+            "json",
+            "geometry",
+        ],
     )
     def test_registry_backed_row_pack_scalar_destinations(self, dtype, value, attr, expected):
         field_data = schema_types.FieldData(type=dtype, field_name="scalar")
@@ -797,6 +814,7 @@ class TestLogicalTypeInsertPaths:
             wraps=entity_helper.type_info.get_scalar_attr,
         ) as get_scalar_attr:
             pack_field_value_to_field_data(value, field_data, field_info, vector_bytes_cache)
+            pack_field_value_to_field_data(None, field_data, field_info, vector_bytes_cache)
 
         get_scalar_attr.assert_any_call(dtype)
         assert list(getattr(field_data.scalars, attr).data) == [expected]
@@ -904,6 +922,10 @@ class TestLogicalTypeInsertPaths:
 
         assert field_data.vectors.dim == dim
         assert getattr(field_data.vectors, vector_attr) == self._payload_bytes(dtype, payload)
+
+    def test_dim_from_vector_payload_rejects_non_fixed_width_type(self):
+        with pytest.raises(ParamError, match="bytes-per-dimension metadata"):
+            entity_helper._dim_from_vector_payload(DataType.SPARSE_FLOAT_VECTOR, b"")
 
     @pytest.mark.parametrize(
         "dtype,dim,vector_attr",

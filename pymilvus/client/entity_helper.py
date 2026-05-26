@@ -43,6 +43,16 @@ _DIRECT_SCALAR_INSERT_TYPES = frozenset(
         DataType.DOUBLE,
     }
 )
+_DIRECT_SCALAR_INSERT_TYPE_NAMES = {
+    DataType.BOOL: "bool",
+    DataType.INT8: "int",
+    DataType.INT16: "int",
+    DataType.INT32: "int",
+    DataType.INT64: "int64",
+    DataType.TIMESTAMPTZ: "string",
+    DataType.FLOAT: "float",
+    DataType.DOUBLE: "double",
+}
 
 _SUPPORTED_ARRAY_ELEMENT_TYPES = frozenset(
     {
@@ -422,6 +432,10 @@ def _dim_from_vector_payload(dtype: DataType, payload: bytes) -> int:
     info = type_info.get_type_info(dtype)
     if info.binary_packed:
         return len(payload) * 8
+    if info.bytes_per_dim is None:
+        raise ParamError(
+            message=f"DataType {info.dtype} does not have bytes-per-dimension metadata"
+        )
     return len(payload) // info.bytes_per_dim
 
 
@@ -454,7 +468,7 @@ def pack_field_value_to_field_data(
 ):
     field_type = field_data.type
     field_name = field_info["name"]
-    if field_type == DataType.BOOL:
+    if field_type in _DIRECT_SCALAR_INSERT_TYPES:
         try:
             attr_name = type_info.get_scalar_attr(field_type)
             scalar_values = getattr(field_data.scalars, attr_name).data
@@ -463,81 +477,14 @@ def pack_field_value_to_field_data(
             else:
                 scalar_values.append(field_value)
         except (TypeError, ValueError) as e:
-            raise DataNotMatchException(
-                message=ExceptionsMessage.FieldDataInconsistent
-                % (field_name, "bool", type(field_value))
-                + f" Detail: {e!s}"
-            ) from e
-    elif field_type in (DataType.INT8, DataType.INT16, DataType.INT32):
-        try:
-            attr_name = type_info.get_scalar_attr(field_type)
-            scalar_values = getattr(field_data.scalars, attr_name).data
-            # need to extend it, or cannot correctly identify field_data.scalars.int_data.data
-            if field_value is None:
-                scalar_values.extend([])
-            else:
-                scalar_values.append(field_value)
-        except (TypeError, ValueError) as e:
-            raise DataNotMatchException(
-                message=ExceptionsMessage.FieldDataInconsistent
-                % (field_name, "int", type(field_value))
-                + f" Detail: {e!s}"
-            ) from e
-    elif field_type == DataType.INT64:
-        try:
-            attr_name = type_info.get_scalar_attr(field_type)
-            scalar_values = getattr(field_data.scalars, attr_name).data
-            if field_value is None:
-                scalar_values.extend([])
-            else:
-                scalar_values.append(field_value)
-        except (TypeError, ValueError) as e:
-            raise DataNotMatchException(
-                message=ExceptionsMessage.FieldDataInconsistent
-                % (field_name, "int64", type(field_value))
-                + f" Detail: {e!s}"
-            ) from e
-    elif field_type == DataType.FLOAT:
-        try:
-            attr_name = type_info.get_scalar_attr(field_type)
-            scalar_values = getattr(field_data.scalars, attr_name).data
-            if field_value is None:
-                scalar_values.extend([])
-            else:
-                scalar_values.append(field_value)
-        except (TypeError, ValueError) as e:
-            raise DataNotMatchException(
-                message=ExceptionsMessage.FieldDataInconsistent
-                % (field_name, "float", type(field_value))
-                + f" Detail: {e!s}"
-            ) from e
-    elif field_type == DataType.DOUBLE:
-        try:
-            attr_name = type_info.get_scalar_attr(field_type)
-            scalar_values = getattr(field_data.scalars, attr_name).data
-            if field_value is None:
-                scalar_values.extend([])
-            else:
-                scalar_values.append(field_value)
-        except (TypeError, ValueError) as e:
-            raise DataNotMatchException(
-                message=ExceptionsMessage.FieldDataInconsistent
-                % (field_name, "double", type(field_value))
-                + f" Detail: {e!s}"
-            ) from e
-    elif field_type == DataType.TIMESTAMPTZ:
-        try:
-            attr_name = type_info.get_scalar_attr(field_type)
-            scalar_values = getattr(field_data.scalars, attr_name).data
-            if field_value is None:
-                scalar_values.extend([])
-            else:
-                scalar_values.append(field_value)
-        except (TypeError, ValueError) as e:
-            raise DataNotMatchException(
-                message=ExceptionsMessage.FieldDataInconsistent
-                % (field_name, "string", type(field_value))
-            ) from e
+            message = ExceptionsMessage.FieldDataInconsistent % (
+                field_name,
+                _DIRECT_SCALAR_INSERT_TYPE_NAMES[field_type],
+                type(field_value),
+            )
+            if field_type != DataType.TIMESTAMPTZ:
+                message += f" Detail: {e!s}"
+            raise DataNotMatchException(message=message) from e
     elif field_type == DataType.FLOAT_VECTOR:
         try:
             attr_name = type_info.get_vector_attr(field_type)
